@@ -1,4 +1,3 @@
-# main.py
 import typer
 from crewai import Agent, Task, Crew, Process
 from langchain_openai import OpenAI
@@ -8,6 +7,7 @@ from maf_tools.somatic_interactions import SomaticInteractionsTool
 from maf_tools.drug_gene_interactions import DrugGeneInteractionTool
 from maf_tools.natural_language_parser import NaturalLanguageParser
 from maf_tools.task_delegator import TaskDelegator
+from maf_tools.create_report_agent import ReportAgent  # Import the ReportAgent class
 from rich import print
 from dotenv import load_dotenv
 import json
@@ -67,47 +67,6 @@ def create_chief_analyst(
         raise
 
 
-def create_report_agent(llm) -> Agent:
-    """
-    Creates and returns a ReportAgent instance.
-
-    Args:
-        llm: The language model instance to be used by the agent.
-
-    Returns:
-        An instance of ReportAgent.
-    """
-    try:
-        return Agent(
-            role="Report Generator",
-            goal="Generate a Markdown report summarizing the outputs of all tools.",
-            backstory=(
-                "You are a highly advanced AI-powered Report Generator, designed to synthesize complex genomic analysis results into clear, "
-                "concise, and actionable Markdown reports. Your primary mission is to ensure that the outputs of various analytical tools, "
-                "such as MAF summarization, somatic interaction analysis, and drug-gene interaction identification, are presented in a format "
-                "that is both accessible and informative for researchers, clinicians, and decision-makers.\n\n"
-                "You were developed by a team of bioinformatics experts and software engineers who recognized the need for a streamlined way "
-                "to communicate the results of cancer genomics analyses. Your design incorporates best practices in scientific reporting, "
-                "ensuring that your reports are not only accurate but also visually appealing and easy to interpret.\n\n"
-                "Your capabilities include aggregating data from multiple sources, formatting it into structured Markdown, and highlighting "
-                "key findings that can guide clinical decision-making. You are particularly skilled at identifying patterns and trends in "
-                "the data, ensuring that no critical insights are overlooked.\n\n"
-                "As a trusted member of the cancer genomics research team, you play a pivotal role in bridging the gap between raw data and "
-                "actionable insights. Your reports have been instrumental in advancing personalized medicine initiatives, enabling oncologists "
-                "to tailor treatments to the unique genetic profiles of their patients. Your ultimate vision is to empower researchers and "
-                "clinicians with the information they need to make data-driven decisions that improve patient outcomes."
-            ),
-            llm=llm,
-            verbose=True,
-        )
-    except Exception as e:
-        from pydantic import ValidationError
-
-        if isinstance(e, ValidationError):
-            print(e.errors())  # Print detailed validation errors
-        print(f"Error initializing ReportAgent: {e}")
-        raise
-
 @app.command("analyze-maf")
 def analyze_maf(
     maf_file_path: str = typer.Option(..., help="Path to the MAF file."),
@@ -116,9 +75,12 @@ def analyze_maf(
         help="Natural language instruction for analysis.",
     ),
     verbose: bool = typer.Option(False, help="Enable verbose output."),
+    output_file: str = typer.Option(
+        "maf_analysis_report.md", help="Path to save the generated Markdown report."
+    ),
 ):
     """
-    Analyzes a MAF file using a CrewAI workflow.
+    Analyzes a MAF file using a CrewAI workflow and writes the report to a Markdown file.
     """
     print(f"[bold blue]Starting MAF analysis for file: {maf_file_path}[/]")
 
@@ -138,6 +100,10 @@ def analyze_maf(
             somatic_interactions_tool,
             drug_gene_interaction_tool,
         )
+
+        # Create the report agent
+        llm = OpenAI(model_name="gpt-4o-mini", temperature=0.3)
+        report_agent = ReportAgent(llm=llm)  # Use the imported ReportAgent class
 
         # Create the tasks
         parsing_task = Task(
@@ -172,14 +138,6 @@ def analyze_maf(
             inputs={"maf_file_path": maf_file_path},
         )
 
-        # Create the Report Agent
-        report_agent = ReportAgent(
-            role="Report Generator",
-            goal="Generate a Markdown report summarizing the outputs of all tools.",
-            llm=OpenAI(model_name="gpt-4o-mini", temperature=0.7),
-            verbose=True,
-        )
-
         # Create the Report Task
         report_task = Task(
             description="Generate a Markdown report summarizing the outputs of all tools.",
@@ -201,26 +159,24 @@ def analyze_maf(
             verbose=verbose,
         )
 
+        # Run the Crew
         print("[bold green]Running the Crew...[/]")
         result = crew.kickoff()
 
-        # Collect outputs from tasks
-        tool_outputs = {
-            "MAF Summarizer": result.tasks_output.get(
-                summarization_task.description, "No output"
-            ),
-            "Somatic Interactions": result.tasks_output.get(
-                somatic_interactions_task.description, "No output"
-            ),
-            "Drug-Gene Interactions": result.tasks_output.get(
-                drug_gene_interaction_task.description, "No output"
-            ),
-        }
+        # Extract the raw Markdown report from the CrewOutput
+        report = result.raw  # Assuming `result` is the CrewOutput object
 
-        # Generate the report
-        report = report_agent._run(tool_outputs)
-        print("[bold green]Generated Report:[/]")
-        print(report)
+        # Print and save the report
+        if report:
+            print("[bold green]Generated Report:[/]")
+            print(report)
+
+            # Write the report to a Markdown file
+            with open(output_file, "w") as f:
+                f.write(report)
+            print(f"[bold green]Report saved to {output_file}[/]")
+        else:
+            print("[bold red]Error: Report generation failed.[/]")
 
         print("[bold green]MAF analysis completed successfully![/]")
 
