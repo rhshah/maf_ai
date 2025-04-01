@@ -1,5 +1,15 @@
-from langchain.tools import BaseTool
+from typing import Type
+from crewai.tools import BaseTool  # Ensure this is the correct BaseTool
+from pydantic import BaseModel, Field
 import json
+
+
+# Define the input schema for the tool
+class TaskDelegatorInput(BaseModel):
+    plan_json: str = Field(
+        ..., description="A JSON-formatted string containing the plan."
+    )
+    maf_file_path: str = Field(..., description="Path to the MAF file.")
 
 
 class TaskDelegator(BaseTool):
@@ -12,34 +22,20 @@ class TaskDelegator(BaseTool):
         "The plan should have a 'steps' key, where steps are high-level actions. "
         "This tool returns a list of tasks that have been delegated."
     )
+    args_schema: Type[BaseModel] = TaskDelegatorInput  # Specify the input schema
 
-    def __init__(self):
-        super().__init__()
-
-    def _run(self, inputs: dict) -> str:
+    def _run(self, plan_json: str, maf_file_path: str) -> str:
         """
         Delegates tasks to other agents based on the plan.
 
         Args:
-            inputs: A dictionary with the following keys:
-                - plan_json: A JSON-formatted string containing the plan.
-                - maf_file_path: Path to the MAF file.
+            plan_json: A JSON-formatted string containing the plan.
+            maf_file_path: Path to the MAF file.
 
         Returns:
             A string representation of the delegated tasks.
         """
         try:
-            # Validate input
-            if not isinstance(inputs, dict):
-                raise ValueError("Input must be a dictionary.")
-            if "plan_json" not in inputs or "maf_file_path" not in inputs:
-                raise ValueError(
-                    "Input dictionary must contain the keys 'plan_json' and 'maf_file_path'."
-                )
-
-            plan_json = inputs["plan_json"]
-            maf_file_path = inputs["maf_file_path"]
-
             # Parse the plan JSON
             plan = json.loads(plan_json)
             steps = plan.get("steps", [])
@@ -67,7 +63,7 @@ class TaskDelegator(BaseTool):
         except Exception as e:
             return f"Error during task delegation: {e}"
 
-    async def _arun(self, inputs: dict):
+    async def _arun(self, plan_json: str, maf_file_path: str):
         """
         Asynchronous execution is not supported.
         """

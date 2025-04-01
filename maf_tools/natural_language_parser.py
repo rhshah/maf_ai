@@ -1,6 +1,14 @@
-from langchain.tools import BaseTool
+from typing import Type
+from crewai.tools import BaseTool
 from langchain_openai import OpenAI
+from pydantic import BaseModel, Field
 import json
+
+# Define the input schema for the tool
+class NaturalLanguageParserInput(BaseModel):
+    instruction: str = Field(
+        ..., description="The natural language instruction to parse."
+    )
 
 
 class NaturalLanguageParser(BaseTool):
@@ -14,36 +22,27 @@ class NaturalLanguageParser(BaseTool):
         'Input: {"instruction": "Analyze the MAF file and identify potential therapeutic targets."} '
         'Output: {"steps": ["Summarize MAF file", "Perform somatic interaction analysis", "Identify drug-gene interactions"]}'
     )
+    args_schema: Type[BaseModel] = (
+        NaturalLanguageParserInput  # Specify the input schema
+    )
 
-    def __init__(self):
-        super().__init__()
-    def dict(self):
-        return {"name": self.name, "description": self.description}
-
-    def _run(self, inputs: dict) -> str:
+    def _run(self, instruction: str) -> str:
         """
         Parses the natural language instruction and returns a JSON plan.
 
         Args:
-            inputs: A dictionary with the key 'instruction'.
+            instruction: The natural language instruction to parse.
 
         Returns:
             A JSON-formatted string containing the plan of action.
         """
         try:
-            # Validate input
-            if not isinstance(inputs, dict) :
-                raise ValueError("Input must be a dictionary.")
-            if "instruction" not in inputs:
-                raise ValueError("Input dictionary must contain the key 'instruction'.")
-
-            instruction = inputs["instruction"]
-
             # Use the LLM to generate a plan
-            llm = OpenAI(temperature=0.3)  # Lower temperature for deterministic output
+            llm = OpenAI(model_name="gpt-4o-mini",temperature=0.3)  # Lower temperature for deterministic output
 
             prompt = f"""
-            You are an expert in cancer genomics analysis. Given the following instruction, create a plan of action with specific steps to achieve the goal. The steps should be high-level and actionable. Return the plan as a JSON-formatted string.
+            You are an expert in cancer genomics analysis. Given the following instruction, create a plan of action with specific steps to achieve the goal. 
+            The steps should be high-level and actionable. Return the plan as a JSON-formatted string.
 
             Instruction: {instruction}
 
@@ -52,16 +51,16 @@ class NaturalLanguageParser(BaseTool):
 
             plan = llm.invoke(prompt)
 
-            # Attempt to load the plan as JSON
-            plan_json = json.loads(plan)
-            return json.dumps(plan_json)  # Return as a string
-
-        except json.JSONDecodeError as e:
-            return f"Error: Could not parse plan as JSON. Original LLM output: {plan}. Error: {e}"
+        # Attempt to load the plan as JSON
+            try:
+                plan_json = json.loads(plan)
+                return json.dumps(plan_json)  # Return as a string
+            except json.JSONDecodeError as e:
+                return f"Error: Could not parse plan as JSON. Original LLM output: {plan}. Error: {e}"
         except Exception as e:
             return f"Error during natural language parsing: {e}"
 
-    async def _arun(self, inputs: dict) -> str:
+    async def _arun(self, instruction: str) -> str:
         """
         Asynchronous execution is not supported.
         """

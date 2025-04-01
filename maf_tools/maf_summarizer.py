@@ -1,5 +1,12 @@
 import pandas as pd
-from langchain.tools import BaseTool
+from typing import Type
+from crewai.tools import BaseTool  # Ensure this is the correct BaseTool
+from pydantic import BaseModel, Field
+
+
+# Define the input schema for the tool
+class MAFSummarizerInput(BaseModel):
+    maf_file_path: str = Field(..., description="Path to the MAF file.")
 
 
 class MAFSummarizer(BaseTool):
@@ -9,24 +16,19 @@ class MAFSummarizer(BaseTool):
         "and variant classifications. The input should be a dictionary with the key "
         "'maf_file_path' pointing to the path of the MAF file."
     )
+    args_schema: Type[BaseModel] = MAFSummarizerInput  # Specify the input schema
 
-    def __init__(self):
-        super().__init__()
-
-    def _run(self, inputs: dict) -> str:
+    def _run(self, maf_file_path: str) -> str:
         """
         Reads a MAF file and returns a summary.
-        The input should be a dictionary with the key 'maf_file_path'.
+
+        Args:
+            maf_file_path: Path to the MAF file.
+
+        Returns:
+            A summary of the MAF file.
         """
         try:
-            # Validate input
-            if not isinstance(inputs, dict) or "maf_file_path" not in inputs:
-                raise ValueError(
-                    "Input must be a dictionary with a 'maf_file_path' key."
-                )
-
-            maf_file_path = inputs["maf_file_path"]
-
             # Read the MAF file
             maf_df = pd.read_csv(
                 maf_file_path, sep="\t", comment="#"
@@ -49,13 +51,13 @@ class MAFSummarizer(BaseTool):
             return summary
 
         except FileNotFoundError:
-            return f"Error: MAF file not found at {inputs.get('maf_file_path', 'Unknown Path')}"
+            return f"Error: MAF file not found at {maf_file_path}"
         except KeyError as e:
             return f"Error: Required column not found in MAF file: {e}"
         except Exception as e:
             return f"Error summarizing MAF file: {e}"
 
-    async def _arun(self, inputs: dict):
+    async def _arun(self, maf_file_path: str):
         """
         Asynchronous execution is not supported.
         """

@@ -1,8 +1,8 @@
 # main.py
 import typer
-from crewai import Agent, Task, Crew
+from crewai import Agent, Task, Crew, Process
 from langchain_openai import OpenAI
-from langchain.tools import BaseTool
+from crewai.tools import BaseTool
 from maf_tools.maf_summarizer import MAFSummarizer
 from maf_tools.somatic_interactions import SomaticInteractionsTool
 from maf_tools.drug_gene_interactions import DrugGeneInteractionTool
@@ -10,16 +10,17 @@ from maf_tools.natural_language_parser import NaturalLanguageParser
 from maf_tools.task_delegator import TaskDelegator
 from rich import print
 from dotenv import load_dotenv
+import json
+from typing import Dict
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = typer.Typer()
 
-
 # Function to create the chief analyst agent
 def create_chief_analyst(natural_language_parser, task_delegator, maf_summarizer, somatic_interactions, drug_gene_interactions):
-    llm = OpenAI(temperature=0.7)
+    llm = OpenAI(model_name="gpt-4o-mini",temperature=0.7)
     try:
         return Agent(
             role="Chief Cancer Genomics Analyst",
@@ -38,17 +39,23 @@ def create_chief_analyst(natural_language_parser, task_delegator, maf_summarizer
                 "Your vision is to revolutionize cancer treatment through data-driven approaches, making personalized medicine a standard of care for all patients, regardless of their background."
             ),
             llm=llm,
+            max_iter=10,
+            allow_delegation="true",
+            max_execution_time=120,
             tools=[
                 natural_language_parser,  
-                #task_delegator,
-                #maf_summarizer, 
-                #somatic_interactions, 
+                task_delegator,
+                maf_summarizer, 
+                somatic_interactions, 
                 #drug_gene_interactions, 
             ],
             verbose=True,
         )
     except Exception as e:
-        print(f"Error creating Chief Cancer Genomics Analyst: {e}")
+        from pydantic import ValidationError
+        if isinstance(e, ValidationError):
+            print(e.errors())  # Print detailed validation errors
+        print(f"Error initializing Agent: {e}")
         raise
 
 @app.command("analyze-maf")
@@ -83,11 +90,11 @@ def analyze_maf(
         if drug_gene_interaction_tool is None:
             raise ValueError("DrugGeneInteractionTool tool is not instantiated correctly.")
 
-        print(f"NaturalLanguageParser is instance of BaseTool: {isinstance(natural_language_parser_tool, BaseTool)}")
-        print(f"TaskDelegator is instance of BaseTool: {isinstance(task_delegator_tool, BaseTool)}")
-        print(f"MAFSummarizer is instance of BaseTool: {isinstance(maf_summarizer_tool, BaseTool)}")
-        print(f"SomaticInteractionsTool is instance of BaseTool: {isinstance(somatic_interactions_tool, BaseTool)}")
-        print(f"DrugGeneInteractionTool is instance of BaseTool: {isinstance(drug_gene_interaction_tool, BaseTool)}")
+        #print(f"NaturalLanguageParser is instance of BaseTool: {isinstance(natural_language_parser_tool, BaseTool)}")
+        #print(f"TaskDelegator is instance of BaseTool: {isinstance(task_delegator_tool, BaseTool)}")
+        #print(f"MAFSummarizer is instance of BaseTool: {isinstance(maf_summarizer_tool, BaseTool)}")
+        #print(f"SomaticInteractionsTool is instance of BaseTool: {isinstance(somatic_interactions_tool, BaseTool)}")
+        #print(f"DrugGeneInteractionTool is instance of BaseTool: {isinstance(drug_gene_interaction_tool, BaseTool)}")
         
         # Create the chief analyst agent
         chief_analyst_agent = create_chief_analyst(
@@ -147,17 +154,51 @@ def analyze_maf(
                 somatic_interactions_task,
                 drug_gene_interaction_task,
             ],
-            verbose=2 if verbose else 0,
+            verbose=bool(verbose) if verbose else False,
         )
 
         print("[bold green]Running the Crew...[/]")
         result = crew.kickoff()
         print("[bold green]Crew Result:[/]")
         print(result)
+        print("[bold green]MAF analysis completed successfully![/]")
+        # Accessing the crew output
+        print(f"Raw Output: {result.raw}")
+        if result.json_dict:
+            print(f"JSON Output: {json.dumps(result.json_dict, indent=2)}")
+        if result.pydantic:
+            print(f"Pydantic Output: {result.pydantic}")
+        print(f"Tasks Output: {result.tasks_output}")
+        print(f"Token Usage: {result.token_usage}")
 
     except Exception as e:
         print(f"[bold red]Error: {e}[/]")
 
+class ReportAgent(Agent):
+    def _run(self, tool_outputs: Dict[str, str]) -> str:
+        """
+        Generates a Markdown report summarizing the outputs of all tools.
 
+        Args:
+            tool_outputs: A dictionary containing the outputs of the tools.
+
+        Returns:
+            A Markdown-formatted report.
+        """
+        try:
+            report = "# MAF Analysis Report\n\n"
+            report += "## Summary of Results\n\n"
+
+            for tool_name, output in tool_outputs.items():
+                report += f"### {tool_name}\n\n"
+                report += f"```\n{output}\n```\n\n"
+
+            report += "## Conclusion\n\n"
+            report += "This report summarizes the results of the MAF analysis, including the MAF file summary, somatic interaction analysis, and drug-gene interactions."
+
+            return report
+        except Exception as e:
+            return f"Error generating report: {e}"
+        
 if __name__ == "__main__":
     app()

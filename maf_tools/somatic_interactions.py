@@ -1,51 +1,40 @@
+from typing import Type
+from crewai.tools import BaseTool  # Ensure this is the correct BaseTool
+from pydantic import BaseModel, Field
 from scipy.stats import fisher_exact
 from statsmodels.sandbox.stats.multicomp import multipletests
-from langchain.tools import BaseTool
 import pandas as pd
+
+
+# Define the input schema for the tool
+class SomaticInteractionsInput(BaseModel):
+    maf_file_path: str = Field(..., description="Path to the MAF file.")
+    top_n: int = Field(25, description="Number of top mutated genes to consider.")
+    pvalue_cutoff: float = Field(0.05, description="P-value cutoff for significance.")
 
 
 class SomaticInteractionsTool(BaseTool):
     name: str = "somatic_interactions"
     description: str = (
         "Identifies mutually exclusive or co-occurring gene sets in a MAF file using Fisher's Exact Test. "
-        "The input should be a dictionary with the following keys: "
-        "'maf_file_path' (path to the MAF file), 'top_n' (number of top mutated genes to consider), "
+        "The input should include 'maf_file_path' (path to the MAF file), 'top_n' (number of top mutated genes to consider), "
         "and 'pvalue_cutoff' (p-value cutoff for significance)."
     )
+    args_schema: Type[BaseModel] = SomaticInteractionsInput  # Specify the input schema
 
-    def __init__(self):
-        super().__init__()
-
-    def _run(self, inputs: dict) -> str:
+    def _run(self, maf_file_path: str, top_n: int, pvalue_cutoff: float) -> str:
         """
         Analyzes somatic interactions in a MAF file.
 
         Args:
-            inputs: A dictionary with the following keys:
-                - maf_file_path: Path to the MAF file.
-                - top_n: Number of top mutated genes to consider.
-                - pvalue_cutoff: The p-value cutoff for significance.
+            maf_file_path: Path to the MAF file.
+            top_n: Number of top mutated genes to consider.
+            pvalue_cutoff: The p-value cutoff for significance.
 
         Returns:
             A string representation of the results (gene pairs, p-values, etc.).
         """
         try:
-            # Validate input
-            if not isinstance(inputs, dict):
-                raise ValueError("Input must be a dictionary.")
-            if "maf_file_path" not in inputs:
-                raise ValueError(
-                    "Input dictionary must contain the key 'maf_file_path'."
-                )
-            if "top_n" not in inputs:
-                inputs["top_n"] = 25  # Default value
-            if "pvalue_cutoff" not in inputs:
-                inputs["pvalue_cutoff"] = 0.05  # Default value
-
-            maf_file_path = inputs["maf_file_path"]
-            top_n = inputs["top_n"]
-            pvalue_cutoff = inputs["pvalue_cutoff"]
-
             # Read the MAF file
             maf_df = pd.read_csv(
                 maf_file_path, sep="\t", comment="#"
@@ -123,13 +112,13 @@ class SomaticInteractionsTool(BaseTool):
             return significant_interactions.to_string()
 
         except FileNotFoundError:
-            return f"Error: MAF file not found at {inputs.get('maf_file_path', 'Unknown Path')}"
+            return f"Error: MAF file not found at {maf_file_path}"
         except KeyError as e:
             return f"Error: Required column not found in MAF file: {e}"
         except Exception as e:
             return f"Error during somatic interaction analysis: {e}"
 
-    async def _arun(self, inputs: dict):
+    async def _arun(self, maf_file_path: str, top_n: int, pvalue_cutoff: float):
         """
         Asynchronous execution is not supported.
         """
