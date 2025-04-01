@@ -2,6 +2,7 @@
 import typer
 from crewai import Agent, Task, Crew
 from langchain_openai import OpenAI
+from langchain.tools import BaseTool
 from maf_tools.maf_summarizer import MAFSummarizer
 from maf_tools.somatic_interactions import SomaticInteractionsTool
 from maf_tools.drug_gene_interactions import DrugGeneInteractionTool
@@ -17,7 +18,7 @@ app = typer.Typer()
 
 
 # Function to create the chief analyst agent
-def create_chief_analyst(maf_summarizer, somatic_interactions, drug_gene_interactions):
+def create_chief_analyst(natural_language_parser, task_delegator, maf_summarizer, somatic_interactions, drug_gene_interactions):
     llm = OpenAI(temperature=0.7)
     try:
         return Agent(
@@ -38,17 +39,17 @@ def create_chief_analyst(maf_summarizer, somatic_interactions, drug_gene_interac
             ),
             llm=llm,
             tools=[
-                NaturalLanguageParser(),  # Instantiate the tool
-                TaskDelegator(),  # Instantiate the tool
-                maf_summarizer,  # Already instantiated
-                somatic_interactions,  # Already instantiated
-                drug_gene_interactions,  # Already instantiated
+                natural_language_parser,  
+                #task_delegator,
+                #maf_summarizer, 
+                #somatic_interactions, 
+                #drug_gene_interactions, 
             ],
             verbose=True,
         )
     except Exception as e:
         print(f"Error creating Chief Cancer Genomics Analyst: {e}")
-
+        raise
 
 @app.command("analyze-maf")
 def analyze_maf(
@@ -66,13 +67,31 @@ def analyze_maf(
 
     try:
         # Create instances of the tools
+        natural_language_parser_tool = NaturalLanguageParser()
+        if natural_language_parser_tool is None:
+            raise ValueError("NaturalLanguageParser tool is not instantiated correctly.")
+        task_delegator_tool = TaskDelegator()  
+        if task_delegator_tool is None:
+            raise ValueError("TaskDelegator tool is not instantiated correctly.")
         maf_summarizer_tool = MAFSummarizer()
+        if maf_summarizer_tool is None:
+            raise ValueError("MAFSummarizer tool is not instantiated correctly.")
         somatic_interactions_tool = SomaticInteractionsTool()
+        if somatic_interactions_tool is None:
+            raise ValueError("SomaticInteractionsTool tool is not instantiated correctly.")
         drug_gene_interaction_tool = DrugGeneInteractionTool()
+        if drug_gene_interaction_tool is None:
+            raise ValueError("DrugGeneInteractionTool tool is not instantiated correctly.")
 
+        print(f"NaturalLanguageParser is instance of BaseTool: {isinstance(natural_language_parser_tool, BaseTool)}")
+        print(f"TaskDelegator is instance of BaseTool: {isinstance(task_delegator_tool, BaseTool)}")
+        print(f"MAFSummarizer is instance of BaseTool: {isinstance(maf_summarizer_tool, BaseTool)}")
+        print(f"SomaticInteractionsTool is instance of BaseTool: {isinstance(somatic_interactions_tool, BaseTool)}")
+        print(f"DrugGeneInteractionTool is instance of BaseTool: {isinstance(drug_gene_interaction_tool, BaseTool)}")
+        
         # Create the chief analyst agent
         chief_analyst_agent = create_chief_analyst(
-            maf_summarizer_tool, somatic_interactions_tool, drug_gene_interaction_tool
+            natural_language_parser_tool, task_delegator_tool, maf_summarizer_tool, somatic_interactions_tool, drug_gene_interaction_tool
         )
 
         # Create the tasks

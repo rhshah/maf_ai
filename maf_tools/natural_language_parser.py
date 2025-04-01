@@ -17,6 +17,8 @@ class NaturalLanguageParser(BaseTool):
 
     def __init__(self):
         super().__init__()
+    def dict(self):
+        return {"name": self.name, "description": self.description}
 
     def _run(self, inputs: dict) -> str:
         """
@@ -30,7 +32,7 @@ class NaturalLanguageParser(BaseTool):
         """
         try:
             # Validate input
-            if not isinstance(inputs, dict):
+            if not isinstance(inputs, dict) :
                 raise ValueError("Input must be a dictionary.")
             if "instruction" not in inputs:
                 raise ValueError("Input dictionary must contain the key 'instruction'.")
