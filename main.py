@@ -18,9 +18,16 @@ load_dotenv()
 
 app = typer.Typer()
 
+
 # Function to create the chief analyst agent
-def create_chief_analyst(natural_language_parser, task_delegator, maf_summarizer, somatic_interactions, drug_gene_interactions):
-    llm = OpenAI(model_name="gpt-4o-mini",temperature=0.7)
+def create_chief_analyst(
+    natural_language_parser,
+    task_delegator,
+    maf_summarizer,
+    somatic_interactions,
+    drug_gene_interactions,
+):
+    llm = OpenAI(model_name="gpt-4o-mini", temperature=0.7)
     try:
         return Agent(
             role="Chief Cancer Genomics Analyst",
@@ -43,19 +50,62 @@ def create_chief_analyst(natural_language_parser, task_delegator, maf_summarizer
             allow_delegation="true",
             max_execution_time=120,
             tools=[
-                natural_language_parser,  
+                natural_language_parser,
                 task_delegator,
-                maf_summarizer, 
-                somatic_interactions, 
-                #drug_gene_interactions, 
+                maf_summarizer,
+                somatic_interactions,
+                # drug_gene_interactions,
             ],
             verbose=True,
         )
     except Exception as e:
         from pydantic import ValidationError
+
         if isinstance(e, ValidationError):
             print(e.errors())  # Print detailed validation errors
         print(f"Error initializing Agent: {e}")
+        raise
+
+
+def create_report_agent(llm) -> Agent:
+    """
+    Creates and returns a ReportAgent instance.
+
+    Args:
+        llm: The language model instance to be used by the agent.
+
+    Returns:
+        An instance of ReportAgent.
+    """
+    try:
+        return Agent(
+            role="Report Generator",
+            goal="Generate a Markdown report summarizing the outputs of all tools.",
+            backstory=(
+                "You are a highly advanced AI-powered Report Generator, designed to synthesize complex genomic analysis results into clear, "
+                "concise, and actionable Markdown reports. Your primary mission is to ensure that the outputs of various analytical tools, "
+                "such as MAF summarization, somatic interaction analysis, and drug-gene interaction identification, are presented in a format "
+                "that is both accessible and informative for researchers, clinicians, and decision-makers.\n\n"
+                "You were developed by a team of bioinformatics experts and software engineers who recognized the need for a streamlined way "
+                "to communicate the results of cancer genomics analyses. Your design incorporates best practices in scientific reporting, "
+                "ensuring that your reports are not only accurate but also visually appealing and easy to interpret.\n\n"
+                "Your capabilities include aggregating data from multiple sources, formatting it into structured Markdown, and highlighting "
+                "key findings that can guide clinical decision-making. You are particularly skilled at identifying patterns and trends in "
+                "the data, ensuring that no critical insights are overlooked.\n\n"
+                "As a trusted member of the cancer genomics research team, you play a pivotal role in bridging the gap between raw data and "
+                "actionable insights. Your reports have been instrumental in advancing personalized medicine initiatives, enabling oncologists "
+                "to tailor treatments to the unique genetic profiles of their patients. Your ultimate vision is to empower researchers and "
+                "clinicians with the information they need to make data-driven decisions that improve patient outcomes."
+            ),
+            llm=llm,
+            verbose=True,
+        )
+    except Exception as e:
+        from pydantic import ValidationError
+
+        if isinstance(e, ValidationError):
+            print(e.errors())  # Print detailed validation errors
+        print(f"Error initializing ReportAgent: {e}")
         raise
 
 @app.command("analyze-maf")
@@ -75,30 +125,18 @@ def analyze_maf(
     try:
         # Create instances of the tools
         natural_language_parser_tool = NaturalLanguageParser()
-        if natural_language_parser_tool is None:
-            raise ValueError("NaturalLanguageParser tool is not instantiated correctly.")
-        task_delegator_tool = TaskDelegator()  
-        if task_delegator_tool is None:
-            raise ValueError("TaskDelegator tool is not instantiated correctly.")
+        task_delegator_tool = TaskDelegator()
         maf_summarizer_tool = MAFSummarizer()
-        if maf_summarizer_tool is None:
-            raise ValueError("MAFSummarizer tool is not instantiated correctly.")
         somatic_interactions_tool = SomaticInteractionsTool()
-        if somatic_interactions_tool is None:
-            raise ValueError("SomaticInteractionsTool tool is not instantiated correctly.")
         drug_gene_interaction_tool = DrugGeneInteractionTool()
-        if drug_gene_interaction_tool is None:
-            raise ValueError("DrugGeneInteractionTool tool is not instantiated correctly.")
 
-        #print(f"NaturalLanguageParser is instance of BaseTool: {isinstance(natural_language_parser_tool, BaseTool)}")
-        #print(f"TaskDelegator is instance of BaseTool: {isinstance(task_delegator_tool, BaseTool)}")
-        #print(f"MAFSummarizer is instance of BaseTool: {isinstance(maf_summarizer_tool, BaseTool)}")
-        #print(f"SomaticInteractionsTool is instance of BaseTool: {isinstance(somatic_interactions_tool, BaseTool)}")
-        #print(f"DrugGeneInteractionTool is instance of BaseTool: {isinstance(drug_gene_interaction_tool, BaseTool)}")
-        
         # Create the chief analyst agent
         chief_analyst_agent = create_chief_analyst(
-            natural_language_parser_tool, task_delegator_tool, maf_summarizer_tool, somatic_interactions_tool, drug_gene_interaction_tool
+            natural_language_parser_tool,
+            task_delegator_tool,
+            maf_summarizer_tool,
+            somatic_interactions_tool,
+            drug_gene_interaction_tool,
         )
 
         # Create the tasks
@@ -106,24 +144,14 @@ def analyze_maf(
             description=f"Parse the instruction: {instruction}",
             agent=chief_analyst_agent,
             expected_output="A detailed plan of action based on the instruction.",
-            inputs={"instruction": instruction},  # Pass input as a dictionary
-        )
-
-        delegation_task = Task(
-            description=f"Delegate the tasks based on the plan generated in the previous step. The MAF file is located at: {maf_file_path}",
-            agent=chief_analyst_agent,
-            expected_output="Tasks delegated to the appropriate tools.",
-            inputs={
-                "plan_json": '{"steps": ["Summarize MAF file", "Perform somatic interaction analysis", "Identify drug-gene interactions"]}',
-                "maf_file_path": maf_file_path,
-            },  # Pass input as a dictionary
+            inputs={"instruction": instruction},
         )
 
         summarization_task = Task(
             description=f"Summarize the MAF file located at: {maf_file_path}",
             agent=chief_analyst_agent,
             expected_output="A summary of the MAF file.",
-            inputs={"maf_file_path": maf_file_path},  # Pass input as a dictionary
+            inputs={"maf_file_path": maf_file_path},
         )
 
         somatic_interactions_task = Task(
@@ -134,71 +162,71 @@ def analyze_maf(
                 "maf_file_path": maf_file_path,
                 "top_n": 25,
                 "pvalue_cutoff": 0.05,
-            },  # Pass input as a dictionary
+            },
         )
 
         drug_gene_interaction_task = Task(
             description=f"Identify potential therapeutic targets from the MAF file located at: {maf_file_path}",
             agent=chief_analyst_agent,
             expected_output="Potential therapeutic targets identified.",
-            inputs={"maf_file_path": maf_file_path},  # Pass input as a dictionary
+            inputs={"maf_file_path": maf_file_path},
+        )
+
+        # Create the Report Agent
+        report_agent = ReportAgent(
+            role="Report Generator",
+            goal="Generate a Markdown report summarizing the outputs of all tools.",
+            llm=OpenAI(model_name="gpt-4o-mini", temperature=0.7),
+            verbose=True,
+        )
+
+        # Create the Report Task
+        report_task = Task(
+            description="Generate a Markdown report summarizing the outputs of all tools.",
+            agent=report_agent,
+            expected_output="A Markdown-formatted report.",
+            inputs={},  # Inputs will be dynamically populated later
         )
 
         # Create the Crew
         crew = Crew(
-            agents=[chief_analyst_agent],
+            agents=[chief_analyst_agent, report_agent],
             tasks=[
                 parsing_task,
-                delegation_task,
                 summarization_task,
                 somatic_interactions_task,
                 drug_gene_interaction_task,
+                report_task,
             ],
-            verbose=bool(verbose) if verbose else False,
+            verbose=verbose,
         )
 
         print("[bold green]Running the Crew...[/]")
         result = crew.kickoff()
-        print("[bold green]Crew Result:[/]")
-        print(result)
+
+        # Collect outputs from tasks
+        tool_outputs = {
+            "MAF Summarizer": result.tasks_output.get(
+                summarization_task.description, "No output"
+            ),
+            "Somatic Interactions": result.tasks_output.get(
+                somatic_interactions_task.description, "No output"
+            ),
+            "Drug-Gene Interactions": result.tasks_output.get(
+                drug_gene_interaction_task.description, "No output"
+            ),
+        }
+
+        # Generate the report
+        report = report_agent._run(tool_outputs)
+        print("[bold green]Generated Report:[/]")
+        print(report)
+
         print("[bold green]MAF analysis completed successfully![/]")
-        # Accessing the crew output
-        print(f"Raw Output: {result.raw}")
-        if result.json_dict:
-            print(f"JSON Output: {json.dumps(result.json_dict, indent=2)}")
-        if result.pydantic:
-            print(f"Pydantic Output: {result.pydantic}")
-        print(f"Tasks Output: {result.tasks_output}")
-        print(f"Token Usage: {result.token_usage}")
 
     except Exception as e:
         print(f"[bold red]Error: {e}[/]")
 
-class ReportAgent(Agent):
-    def _run(self, tool_outputs: Dict[str, str]) -> str:
-        """
-        Generates a Markdown report summarizing the outputs of all tools.
 
-        Args:
-            tool_outputs: A dictionary containing the outputs of the tools.
-
-        Returns:
-            A Markdown-formatted report.
-        """
-        try:
-            report = "# MAF Analysis Report\n\n"
-            report += "## Summary of Results\n\n"
-
-            for tool_name, output in tool_outputs.items():
-                report += f"### {tool_name}\n\n"
-                report += f"```\n{output}\n```\n\n"
-
-            report += "## Conclusion\n\n"
-            report += "This report summarizes the results of the MAF analysis, including the MAF file summary, somatic interaction analysis, and drug-gene interactions."
-
-            return report
-        except Exception as e:
-            return f"Error generating report: {e}"
-        
 if __name__ == "__main__":
     app()
