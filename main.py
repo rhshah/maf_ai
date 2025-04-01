@@ -1,6 +1,5 @@
 # main.py
 import typer
-from typing import Optional
 from crewai import Agent, Task, Crew
 from langchain_openai import OpenAI
 from maf_tools.maf_summarizer import MAFSummarizer
@@ -10,9 +9,6 @@ from maf_tools.natural_language_parser import NaturalLanguageParser
 from maf_tools.task_delegator import TaskDelegator
 from rich import print
 from dotenv import load_dotenv
-import os
-import re
-
 
 # Load environment variables from .env file
 load_dotenv()
@@ -47,7 +43,7 @@ def create_chief_analyst(maf_summarizer, somatic_interactions, drug_gene_interac
                 maf_summarizer,  # Already instantiated
                 somatic_interactions,  # Already instantiated
                 drug_gene_interactions,  # Already instantiated
-            ],  # Add all tools
+            ],
             verbose=True,
         )
     except Exception as e:
@@ -62,7 +58,6 @@ def analyze_maf(
         help="Natural language instruction for analysis.",
     ),
     verbose: bool = typer.Option(False, help="Enable verbose output."),
-    temperature: float = typer.Option(0.7, help="LLM temperature."),
 ):
     """
     Analyzes a MAF file using a CrewAI workflow.
@@ -81,7 +76,6 @@ def analyze_maf(
         )
 
         # Create the tasks
-        # 1. Natural Language Parsing Task
         parsing_task = Task(
             description=f"Parse the instruction: {instruction}",
             agent=chief_analyst_agent,
@@ -89,7 +83,6 @@ def analyze_maf(
             inputs={"instruction": instruction},  # Pass input as a dictionary
         )
 
-        # 2. Task Delegation Task
         delegation_task = Task(
             description=f"Delegate the tasks based on the plan generated in the previous step. The MAF file is located at: {maf_file_path}",
             agent=chief_analyst_agent,
@@ -100,7 +93,6 @@ def analyze_maf(
             },  # Pass input as a dictionary
         )
 
-        # 3. MAF Summarization Task
         summarization_task = Task(
             description=f"Summarize the MAF file located at: {maf_file_path}",
             agent=chief_analyst_agent,
@@ -108,7 +100,6 @@ def analyze_maf(
             inputs={"maf_file_path": maf_file_path},  # Pass input as a dictionary
         )
 
-        # 4. Somatic Interactions Task
         somatic_interactions_task = Task(
             description=f"Perform somatic interaction analysis on the MAF file located at: {maf_file_path}",
             agent=chief_analyst_agent,
@@ -120,16 +111,16 @@ def analyze_maf(
             },  # Pass input as a dictionary
         )
 
-        # 5. Drug-Gene Interaction Task
         drug_gene_interaction_task = Task(
             description=f"Identify potential therapeutic targets from the MAF file located at: {maf_file_path}",
             agent=chief_analyst_agent,
             expected_output="Potential therapeutic targets identified.",
+            inputs={"maf_file_path": maf_file_path},  # Pass input as a dictionary
         )
 
         # Create the Crew
         crew = Crew(
-            agents=[chief_analyst_agent],  # Only the chief analyst
+            agents=[chief_analyst_agent],
             tasks=[
                 parsing_task,
                 delegation_task,
