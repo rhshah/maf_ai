@@ -8,45 +8,50 @@ from pydantic import BaseModel, Field
 # Define the input schema for the tool
 class DrugGeneInteractionInput(BaseModel):
     maf_file_path: str = Field(..., description="Path to the MAF file.")
+    num_genes: int = Field(3, description="Number of top mutated genes to analyze.")
+    num_interactions: int = Field(
+        5, description="Number of top interactions to retrieve per gene."
+    )
 
 
 class DrugGeneInteractionTool(BaseTool):
     name: str = "drug_gene_interaction"
     description: str = (
         "Identifies potential therapeutic targets based on drug-gene interaction data from DGIdb. "
-        "The input should be the path to a MAF file. "
-        "The tool analyzes the top 3 most frequently mutated genes in the MAF file."
+        "The input should include the path to a MAF file, the number of top mutated genes to analyze, "
+        "and the number of top interactions to retrieve per gene."
     )
     args_schema: Type[BaseModel] = DrugGeneInteractionInput  # Specify the input schema
 
-    def _run(self, maf_file_path: str) -> str:
+    def _run(self, maf_file_path: str, num_genes: int, num_interactions: int) -> str:
         """
-        Identifies drug-gene interactions for the top 3 genes in a MAF file using a GraphQL query.
+        Identifies drug-gene interactions for the top mutated genes in a MAF file using a GraphQL query.
 
         Args:
             maf_file_path: Path to the MAF file.
+            num_genes: Number of top mutated genes to analyze.
+            num_interactions: Number of top interactions to retrieve per gene.
 
         Returns:
-            A summary of drug-gene interactions for the top 3 genes.
+            A summary of drug-gene interactions for the specified genes.
         """
         try:
             # Read the MAF file
             maf_df = pd.read_csv(maf_file_path, sep="\t", comment="#")
 
-            # Get the top 3 most frequently mutated genes
-            gene_counts = maf_df["Hugo_Symbol"].value_counts().nlargest(3)
+            # Get the top mutated genes
+            gene_counts = maf_df["Hugo_Symbol"].value_counts().nlargest(num_genes)
             top_genes = gene_counts.index.tolist()
 
             interactions = []
 
             for gene in top_genes:
                 # GraphQL query
-                query = (
-                    """
+                query = """
                 {
                   genes(names: ["%s"]) {
                     nodes {
-                      interactions {
+                      interactions(first: %d) {
                         drug {
                           name
                           conceptId
@@ -70,9 +75,7 @@ class DrugGeneInteractionTool(BaseTool):
                     }
                   }
                 }
-                """
-                    % gene
-                )
+                """ % (gene, num_interactions)
 
                 # Send the GraphQL request
                 url = "https://dgidb.org/api/graphql"
@@ -109,7 +112,7 @@ class DrugGeneInteractionTool(BaseTool):
             if interactions:
                 return "\n".join(interactions)
             else:
-                return "No drug-gene interactions found for the top 3 genes."
+                return "No drug-gene interactions found for the specified genes."
 
         except FileNotFoundError:
             return f"Error: MAF file not found at {maf_file_path}"
@@ -118,7 +121,7 @@ class DrugGeneInteractionTool(BaseTool):
         except Exception as e:
             raise RuntimeError(f"Error during drug-gene interaction analysis: {e}")
 
-    async def _arun(self, maf_file_path: str):
+    async def _arun(self, maf_file_path: str, num_genes: int, num_interactions: int):
         """
         Asynchronous execution is not supported.
         """

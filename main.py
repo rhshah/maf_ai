@@ -54,7 +54,7 @@ def create_chief_analyst(
                 task_delegator,
                 maf_summarizer,
                 somatic_interactions,
-                # drug_gene_interactions,
+                drug_gene_interactions,
             ],
             verbose=True,
         )
@@ -106,13 +106,6 @@ def analyze_maf(
         report_agent = ReportAgent(llm=llm)  # Use the imported ReportAgent class
 
         # Create the tasks
-        parsing_task = Task(
-            description=f"Parse the instruction: {instruction}",
-            agent=chief_analyst_agent,
-            expected_output="A detailed plan of action based on the instruction.",
-            inputs={"instruction": instruction},
-        )
-
         summarization_task = Task(
             description=f"Summarize the MAF file located at: {maf_file_path}",
             agent=chief_analyst_agent,
@@ -135,36 +128,37 @@ def analyze_maf(
             description=f"Identify potential therapeutic targets from the MAF file located at: {maf_file_path}",
             agent=chief_analyst_agent,
             expected_output="Potential therapeutic targets identified.",
-            inputs={"maf_file_path": maf_file_path},
-        )
-
-        # Create the Report Task
-        report_task = Task(
-            description="Generate a Markdown report summarizing the outputs of all tools.",
-            agent=report_agent,
-            expected_output="A Markdown-formatted report.",
-            inputs={},  # Inputs will be dynamically populated later
+            inputs={
+                "maf_file_path": maf_file_path,
+                "num_genes": 5,
+                "num_interactions": 10,
+            },
         )
 
         # Create the Crew
         crew = Crew(
             agents=[chief_analyst_agent, report_agent],
             tasks=[
-                parsing_task,
                 summarization_task,
                 somatic_interactions_task,
                 drug_gene_interaction_task,
-                report_task,
             ],
             verbose=verbose,
         )
 
         # Run the Crew
         print("[bold green]Running the Crew...[/]")
-        result = crew.kickoff()
+        results = crew.kickoff()
 
-        # Extract the raw Markdown report from the CrewOutput
-        report = result.raw  # Assuming `result` is the CrewOutput object
+        # Collect outputs from tasks
+        task_outputs = {
+            "MAF Summary": results[summarization_task],
+            "Somatic Interactions": results[somatic_interactions_task],
+            "Drug-Gene Interactions": results[drug_gene_interaction_task],
+        }
+
+        # Generate the final report
+        report = report_agent.generate_report(task_outputs)
 
         # Print and save the report
         if report:

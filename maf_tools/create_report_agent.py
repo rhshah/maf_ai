@@ -24,38 +24,45 @@ class ReportAgent(Agent):
             llm=llm,
             verbose=True,
         )
-        
 
+    def generate_report(self, task_outputs: dict) -> str:
+        """
+        Generates a comprehensive Markdown report from the outputs of various tasks.
 
-def generate_report(
-    self, maf_summary: str, somatic_interactions: str, drug_gene_interactions: str
-) -> str:
-    """Generates a report from the analysis results."""
-    prompt = f"""
-    You are a highly skilled science writer specializing in cancer genomics. Your task is to create a professional, well-structured, and visually appealing Markdown report summarizing the results of a genomic analysis. 
-    The report should be clear, concise, and actionable, highlighting key findings and potential therapeutic targets. Use tables, bullet points, and other Markdown formatting to enhance readability.
+        Args:
+            task_outputs (dict): A dictionary containing outputs from various tasks.
+                                 Keys are task names, and values are their respective outputs.
 
-    Here are the analysis results:
+        Returns:
+            str: A Markdown-formatted report.
+        """
+        # Prepare the sections of the report
+        sections = []
+        for task_name, task_output in task_outputs.items():
+            sections.append(f"### {task_name}\n{task_output}\n")
 
-    ### MAF Summary
-    {maf_summary}
+        # Combine all sections into a single Markdown report
+        report_body = "\n".join(sections)
 
-    ### Somatic Interactions
-    {somatic_interactions}
+        # Create the final prompt for the LLM
+        prompt = f"""
+        You are a highly skilled science writer specializing in cancer genomics. Your task is to create a professional, well-structured, and visually appealing Markdown report summarizing the results of a genomic analysis. 
+        The report should be clear, concise, and actionable, highlighting key findings and potential therapeutic targets. Use tables, bullet points, and other Markdown formatting to enhance readability.
 
-    ### Drug-Gene Interactions
-    {drug_gene_interactions}
+        Here are the analysis results from various tasks:
 
-    #### Instructions:
-    - Summarize the most significant findings from the MAF summary.
-    - Highlight the most critical somatic interactions, focusing on their biological and clinical relevance.
-    - Emphasize the drug-gene interactions, including the drugs, their targets, and any associated interaction scores or sources.
-    - Use Markdown tables and bullet points to organize the information clearly.
-    - Conclude with a brief summary of the key insights and their potential impact on therapeutic strategies.
+        {report_body}
 
-    Generate the report below:
+        #### Instructions:
+        - Summarize the most significant findings from each section.
+        - Highlight the most critical insights, focusing on their biological and clinical relevance.
+        - Use Markdown tables and bullet points to organize the information clearly.
+        - Conclude with a brief summary of the key insights and their potential impact on therapeutic strategies.
 
-    Report:
-    """
-    report = self.llm(prompt)
-    return report
+        Generate the report below:
+
+        Report:
+        """
+        # Generate the report using the LLM
+        report = self.llm(prompt)
+        return report
